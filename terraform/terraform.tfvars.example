@@ -1,0 +1,37 @@
+# Copy this file to terraform.tfvars and fill in your values.
+# terraform.tfvars is git-ignored because it may contain sensitive values.
+
+# ── Core ──────────────────────────────────────────────────────────────────────
+aws_region   = "us-east-1"
+environment  = "production"
+project_name = "shopyyy"
+
+# ── Networking ────────────────────────────────────────────────────────────────
+vpc_cidr             = "10.0.0.0/16"
+public_subnet_cidrs  = ["10.0.1.0/24", "10.0.2.0/24"]
+private_subnet_cidrs = ["10.0.11.0/24", "10.0.12.0/24"]
+availability_zones   = ["us-east-1a", "us-east-1b"]
+
+# ── DNS ───────────────────────────────────────────────────────────────────────
+domain_name = "shopyyy.com"
+
+# ── Compute ───────────────────────────────────────────────────────────────────
+backend_container_image = "public.ecr.aws/nginx/nginx:latest"
+backend_container_port  = 3000
+ecs_task_cpu            = 512
+ecs_task_memory         = 1024
+ecs_desired_count       = 2
+
+# ── Database ──────────────────────────────────────────────────────────────────
+db_instance_class    = "db.t3.medium"
+db_name              = "shopyyy"
+db_username          = "shopyyy_admin"
+db_allocated_storage = 20
+
+# ── Caching ───────────────────────────────────────────────────────────────────
+redis_node_type = "cache.t3.micro"
+
+# ── Kafka / MSK ───────────────────────────────────────────────────────────────
+msk_instance_type      = "kafka.t3.small"
+msk_kafka_version      = "3.5.1"
+msk_broker_volume_size = 20
