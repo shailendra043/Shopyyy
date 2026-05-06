@@ -1,49 +1,47 @@
 # Shopyyy — AWS Infrastructure
 
+![Terraform](https://img.shields.io/badge/terraform-%235835CC.svg?style=for-the-badge&logo=terraform&logoColor=white)
+![AWS](https://img.shields.io/badge/AWS-%23FF9900.svg?style=for-the-badge&logo=amazon-aws&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/postgresql-%23316192.svg?style=for-the-badge&logo=postgresql&logoColor=white)
+![Apache Kafka](https://img.shields.io/badge/apache_kafka-000?style=for-the-badge&logo=apachekafka)
+
 This repository contains the Terraform code that provisions the full AWS infrastructure for the **Shopyyy** e-commerce platform.
 
 ---
 
 ## Architecture Overview
 
-```
-Browser
-  │
-  ▼
-Route 53 (shopyyy.com)
-  │ DNS alias
-  ▼
-┌─────────────────────────┐
-│  CloudFront (CDN)        │
-│  ACM cert (*.shopyyy.com)│
-└────────┬────────────────┘
-         │
- ┌───────┴────────────────────────────────────┐
- │ /api/*                                     │ /*
- ▼                                            ▼
-┌───────────────────────┐     ┌─────────────────────┐
-│  ALB (public subnets) │     │  S3 Bucket           │
-│  port 443 HTTPS       │     │  (React static files)│
-└───────────┬───────────┘     └─────────────────────┘
-            │
-            ▼
-┌───────────────────────────────────────────────────────────────┐
-│               Private Subnets (AZ-a & AZ-b)                    │
-│                                                               │
-│  ┌─────────────────────┐   ┌──────────────────────────────┐  │
-│  │  ECS Fargate Tasks  │   │  ECS Fargate Worker Tasks    │  │
-│  │  (Backend API)      │   │  (Order processor — Kafka)   │  │
-│  └──────┬──────┬───────┘   └──────────────────────────────┘  │
-│         │      │                                               │
-│         │      └──────────────── ElastiCache Redis            │
-│         │                        (cache.t3.micro)             │
-│         │                                                      │
-│         ├──────────────────────► RDS PostgreSQL 17             │
-│         │                        (db.t3.medium, Multi-AZ)     │
-│         │                                                      │
-│         └──────────────────────► Amazon MSK (Kafka)            │
-│                                  (2 brokers, AZ-a & AZ-b)     │
-└───────────────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    Client([Browser/Client]) -->|DNS| Route53(Route 53<br>shopyyy.com)
+    Route53 --> CF[CloudFront CDN<br>ACM cert: *.shopyyy.com]
+    
+    CF -->|/* Static Assets| S3[S3 Bucket<br>React Files]
+    CF -->|/api/* HTTPS| ALB[Application Load Balancer<br>Public Subnets]
+    
+    subgraph VPC [VPC]
+        ALB
+        
+        subgraph PrivateSubnets [Private Subnets AZ-a & AZ-b]
+            API[ECS Fargate Tasks<br>Backend API]
+            Worker[ECS Fargate Worker Tasks<br>Order Processor]
+            
+            Cache[(ElastiCache Redis<br>cache.t3.micro)]
+            DB[(RDS PostgreSQL 17<br>db.t3.medium Multi-AZ)]
+            Kafka(((Amazon MSK<br>2 Brokers)))
+        end
+    end
+    
+    ALB --> API
+    API --> Cache
+    API --> DB
+    API --> Kafka
+    Kafka --> Worker
+    Worker --> DB
+    Worker --> Cache
+
+    classDef aws fill:#FF9900,stroke:#232F3E,stroke-width:2px,color:white;
+    class Route53,CF,S3,ALB,API,Worker,Cache,DB,Kafka aws;
 ```
 
 ### Components
@@ -169,6 +167,19 @@ After a successful apply, Terraform will print:
 
 ---
 
+## Clean Up
+
+To avoid incurring future AWS charges, remember to destroy the infrastructure when you are finished testing:
+
+```bash
+cd terraform
+terraform destroy
+```
+
+> **Warning**: This action will permanently delete all provisioned resources, including the RDS database and S3 buckets. Ensure you have backed up any necessary data before proceeding.
+
+---
+
 ## Design Decisions
 
 ### Why ECS Fargate instead of EC2 or EKS?
@@ -185,3 +196,11 @@ After a successful apply, Terraform will print:
 MSK (Kafka) preserves message ordering per partition and allows multiple independent consumer
 groups to replay the same stream — useful for order processing pipelines where the order worker,
 analytics, and notifications all need to consume the same events independently.
+
+### Cost Considerations
+
+Please be aware that this infrastructure includes resources that do not fit entirely within the AWS Free Tier and will incur monthly costs if left running:
+- **Amazon MSK**: Running 2 brokers incurs a baseline hourly cost.
+- **RDS PostgreSQL**: Multi-AZ deployments are billed for both the primary and standby instances.
+- **ECS Fargate & ElastiCache**: Billed based on hourly usage, vCPU, and memory capacity.
+- **NAT Gateways**: 2 NAT Gateways (one per AZ) incur an hourly charge plus data processing fees.
